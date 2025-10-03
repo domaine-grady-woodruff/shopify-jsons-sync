@@ -75,8 +75,15 @@ export const readJsonFile = async (
 }
 
 export const cleanRemoteFiles = async (): Promise<void> => {
+  const remoteDir = 'remote'
+
+  if (!existsSync(remoteDir)) {
+    debug(`Skipping cleanRemoteFiles: ${remoteDir} directory not found`)
+    return
+  }
+
   try {
-    rmRF('remote')
+    await rmRF(remoteDir)
   } catch (error) {
     if (error instanceof Error) debug(error.message)
   }
