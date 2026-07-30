@@ -5,7 +5,6 @@ A GitHub Action to sync JSON content (locale strings & JSON templates) between t
 ## Features
 
 - Syncs locale files (`locales/*.json`)
-- Syncs configuration data files (`config/*_data.json`) 
 - Syncs template files (`templates/**/*.json`)
 - Supports syncing from live theme or specific unpublished themes
 - Merges local changes with remote content

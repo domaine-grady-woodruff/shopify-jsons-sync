@@ -3,14 +3,13 @@ import {readFile, writeFile} from 'fs/promises'
 import {existsSync} from 'fs'
 import deepmerge from 'deepmerge'
 import {rmRF} from '@actions/io'
+import {exec} from '@actions/exec'
 import {copySync} from 'fs-extra'
 import {debug, error as errorLog} from '@actions/core'
 import {
   ShopifySettingsOrTemplateJSON,
   ISyncLocalJSONWithRemoteJSONForStore
 } from './types.d'
-import {ExecException, exec as nativeExec} from 'child_process'
-import JSONParser from 'json-parse-safe'
 
 export const EXEC_OPTIONS = {
   listeners: {
@@ -35,7 +34,7 @@ const fetchLocalFileForRemoteFile = async (
   return remoteFile.replace('remote/', '')
 }
 
-// Remove this from JSONString before parsing
+// Shopify prepends auto-generated locale/template files with a block comment like:
 // /*
 // * ------------------------------------------------------------
 // * IMPORTANT: The contents of this file are auto-generated.
@@ -45,23 +44,12 @@ const fetchLocalFileForRemoteFile = async (
 // * made to this file may be overwritten.
 // * ------------------------------------------------------------
 // */
-
+// which is not valid JSON, so it must be stripped before parsing.
 const cleanJSONStringofShopifyComment = (
   jsonString: string
 ): ShopifySettingsOrTemplateJSON => {
-  try {
-    const parsed = JSONParser(jsonString)
-    if (parsed && 'value' in parsed) {
-      return parsed.value as ShopifySettingsOrTemplateJSON
-    }
-
-    throw new Error('JSON Parse Error')
-  } catch (error) {
-    if (error instanceof Error) {
-      debug(error.message)
-    }
-    return JSON.parse(jsonString)
-  }
+  const withoutComment = jsonString.replace(/\/\*.*?\*\//s, '').trim()
+  return JSON.parse(withoutComment)
 }
 
 export const readJsonFile = async (
@@ -89,24 +77,15 @@ export const cleanRemoteFiles = async (): Promise<void> => {
   }
 }
 
-export async function execShellCommand(cmd: string): Promise<string | Buffer> {
-  return new Promise((resolve, reject) => {
-    nativeExec(
-      cmd,
-      (error: ExecException | null, stdout: string, stderr: string) => {
-        if (error) {
-          return reject(error)
-        }
-        resolve(stdout ? stdout : stderr)
-      }
-    )
-  })
-}
-
 export const sendFilesWithPathToShopify = async (
   files: string[],
   {targetThemeId, store}: ISyncLocalJSONWithRemoteJSONForStore
 ): Promise<string[]> => {
+  if (files.length === 0) {
+    debug('No files to push to Shopify, skipping push')
+    return files
+  }
+
   for (const file of files) {
     debug(`Pushing ${file} to Shopify`)
   }
@@ -126,7 +105,7 @@ export const sendFilesWithPathToShopify = async (
     })
   }
 
-  await execShellCommand(
+  await exec(
     `shopify theme ${[
       'push',
       pushOnlyCommand,
@@ -138,19 +117,22 @@ export const sendFilesWithPathToShopify = async (
       '--path',
       'remote/new',
       '--nodelete'
-    ].join(' ')}`
+    ].join(' ')}`,
+    [],
+    EXEC_OPTIONS
   )
 
   return files
 }
 
-// Go throgh all keys in the object and a key which has disabled: true, remove it from the object
+// Go through all keys in the object and if a key's value has disabled: true, remove it from the object
 export const removeDisabledKeys = (
   obj: ShopifySettingsOrTemplateJSON
 ): ShopifySettingsOrTemplateJSON => {
   const newObj = {...obj}
   for (const key in obj) {
-    if (newObj[key]?.hasOwnProperty('disabled')) {
+    const value = newObj[key] as {disabled?: boolean} | undefined
+    if (value?.disabled === true) {
       delete newObj[key]
     }
   }

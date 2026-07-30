@@ -59,7 +59,9 @@ async function run() {
             : 'live theme';
         (0, core_1.debug)(`Syncing JSON files from ${syncThemeInfo} to target theme ${targetThemeId}`);
         // STEP 1: Pull JSON files FROM the source theme (or live theme)
-        await (0, exec_1.exec)(`shopify theme pull --only config/*_data.json --only templates/**/*.json --only locales/*.json ${themeFlag} --path remote --store ${store} --verbose`, [], utils_1.EXEC_OPTIONS);
+        // Note: config/*_data.json (settings_data.json) is intentionally not pulled -
+        // this action only syncs locales and templates, see README for details.
+        await (0, exec_1.exec)(`shopify theme pull --only templates/**/*.json --only locales/*.json ${themeFlag} --path remote --store ${store} --verbose`, [], utils_1.EXEC_OPTIONS);
         // STEP 2: Process and prepare the JSON files for syncing
         const localeFilesToPush = await (0, utils_1.syncLocaleAndSettingsJSON)();
         const newTemplatesToPush = await (0, utils_1.getNewTemplatesToRemote)();
@@ -91,16 +93,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getNewTemplatesToRemote = exports.syncLocaleAndSettingsJSON = exports.removeDisabledKeys = exports.sendFilesWithPathToShopify = exports.execShellCommand = exports.cleanRemoteFiles = exports.readJsonFile = exports.fetchFiles = exports.EXEC_OPTIONS = void 0;
+exports.getNewTemplatesToRemote = exports.syncLocaleAndSettingsJSON = exports.removeDisabledKeys = exports.sendFilesWithPathToShopify = exports.cleanRemoteFiles = exports.readJsonFile = exports.fetchFiles = exports.EXEC_OPTIONS = void 0;
 const glob_1 = __nccwpck_require__(8090);
 const promises_1 = __nccwpck_require__(3292);
 const fs_1 = __nccwpck_require__(7147);
 const deepmerge_1 = __importDefault(__nccwpck_require__(6323));
 const io_1 = __nccwpck_require__(7436);
+const exec_1 = __nccwpck_require__(1514);
 const fs_extra_1 = __nccwpck_require__(5630);
 const core_1 = __nccwpck_require__(2186);
-const child_process_1 = __nccwpck_require__(2081);
-const json_parse_safe_1 = __importDefault(__nccwpck_require__(2114));
 exports.EXEC_OPTIONS = {
     listeners: {
         stdout: (data) => {
@@ -120,7 +121,7 @@ exports.fetchFiles = fetchFiles;
 const fetchLocalFileForRemoteFile = async (remoteFile) => {
     return remoteFile.replace('remote/', '');
 };
-// Remove this from JSONString before parsing
+// Shopify prepends auto-generated locale/template files with a block comment like:
 // /*
 // * ------------------------------------------------------------
 // * IMPORTANT: The contents of this file are auto-generated.
@@ -130,20 +131,10 @@ const fetchLocalFileForRemoteFile = async (remoteFile) => {
 // * made to this file may be overwritten.
 // * ------------------------------------------------------------
 // */
+// which is not valid JSON, so it must be stripped before parsing.
 const cleanJSONStringofShopifyComment = (jsonString) => {
-    try {
-        const parsed = (0, json_parse_safe_1.default)(jsonString);
-        if (parsed && 'value' in parsed) {
-            return parsed.value;
-        }
-        throw new Error('JSON Parse Error');
-    }
-    catch (error) {
-        if (error instanceof Error) {
-            (0, core_1.debug)(error.message);
-        }
-        return JSON.parse(jsonString);
-    }
+    const withoutComment = jsonString.replace(/\/\*.*?\*\//s, '').trim();
+    return JSON.parse(withoutComment);
 };
 const readJsonFile = async (file) => {
     if (!(0, fs_1.existsSync)(file)) {
@@ -154,8 +145,13 @@ const readJsonFile = async (file) => {
 };
 exports.readJsonFile = readJsonFile;
 const cleanRemoteFiles = async () => {
+    const remoteDir = 'remote';
+    if (!(0, fs_1.existsSync)(remoteDir)) {
+        (0, core_1.debug)(`Skipping cleanRemoteFiles: ${remoteDir} directory not found`);
+        return;
+    }
     try {
-        (0, io_1.rmRF)('remote');
+        await (0, io_1.rmRF)(remoteDir);
     }
     catch (error) {
         if (error instanceof Error)
@@ -163,18 +159,11 @@ const cleanRemoteFiles = async () => {
     }
 };
 exports.cleanRemoteFiles = cleanRemoteFiles;
-async function execShellCommand(cmd) {
-    return new Promise((resolve, reject) => {
-        (0, child_process_1.exec)(cmd, (error, stdout, stderr) => {
-            if (error) {
-                return reject(error);
-            }
-            resolve(stdout ? stdout : stderr);
-        });
-    });
-}
-exports.execShellCommand = execShellCommand;
 const sendFilesWithPathToShopify = async (files, { targetThemeId, store }) => {
+    if (files.length === 0) {
+        (0, core_1.debug)('No files to push to Shopify, skipping push');
+        return files;
+    }
     for (const file of files) {
         (0, core_1.debug)(`Pushing ${file} to Shopify`);
     }
@@ -190,7 +179,7 @@ const sendFilesWithPathToShopify = async (files, { targetThemeId, store }) => {
             overwrite: true
         });
     }
-    await execShellCommand(`shopify theme ${[
+    await (0, exec_1.exec)(`shopify theme ${[
         'push',
         pushOnlyCommand,
         '--theme',
@@ -201,15 +190,16 @@ const sendFilesWithPathToShopify = async (files, { targetThemeId, store }) => {
         '--path',
         'remote/new',
         '--nodelete'
-    ].join(' ')}`);
+    ].join(' ')}`, [], exports.EXEC_OPTIONS);
     return files;
 };
 exports.sendFilesWithPathToShopify = sendFilesWithPathToShopify;
-// Go throgh all keys in the object and a key which has disabled: true, remove it from the object
+// Go through all keys in the object and if a key's value has disabled: true, remove it from the object
 const removeDisabledKeys = (obj) => {
     const newObj = { ...obj };
     for (const key in obj) {
-        if (newObj[key]?.hasOwnProperty('disabled')) {
+        const value = newObj[key];
+        if (value?.disabled === true) {
             delete newObj[key];
         }
     }
@@ -7541,29 +7531,6 @@ function patch (fs) {
     }
 
     return false
-  }
-}
-
-
-/***/ }),
-
-/***/ 2114:
-/***/ ((module) => {
-
-"use strict";
-
-
-module.exports = JSONParse
-
-function JSONParse (text, reviver) {
-  try {
-    return {
-      value: JSON.parse(text, reviver)
-    }
-  } catch (ex) {
-    return {
-      error: ex
-    }
   }
 }
 

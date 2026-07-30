@@ -44,8 +44,10 @@ async function run(): Promise<void> {
     )
 
     // STEP 1: Pull JSON files FROM the source theme (or live theme)
+    // Note: config/*_data.json (settings_data.json) is intentionally not pulled -
+    // this action only syncs locales and templates, see README for details.
     await exec(
-      `shopify theme pull --only config/*_data.json --only templates/**/*.json --only locales/*.json ${themeFlag} --path remote --store ${store} --verbose`,
+      `shopify theme pull --only templates/**/*.json --only locales/*.json ${themeFlag} --path remote --store ${store} --verbose`,
       [],
       EXEC_OPTIONS
     )
