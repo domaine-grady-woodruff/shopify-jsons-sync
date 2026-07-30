@@ -50,8 +50,19 @@ async function run(): Promise<void> {
     // STEP 1: Pull JSON files FROM the source theme (or live theme)
     // Note: config/*_data.json (settings_data.json) is intentionally not pulled -
     // this action only syncs locales and templates, see README for details.
+    //
+    // IMPORTANT: `templates/**/*.json` alone does NOT match direct children of
+    // templates/ in the Shopify CLI's own --only glob matching (confirmed via
+    // CI logs: "Ignoring theme file templates/index.json via --only..." for
+    // every top-level template). Without `templates/*.json` too, every
+    // existing top-level template (index.json, product.json, cart.json, etc.)
+    // is silently excluded from the pull, which then makes
+    // getNewTemplatesToRemote() wrongly think they don't exist remotely and
+    // force-pushes the local repo's version over the real content on the
+    // target theme. Only genuinely nested templates (e.g.
+    // templates/metaobject/promotions.json) were ever matched by `**` alone.
     await exec(
-      `shopify theme pull --only templates/**/*.json --only locales/*.json ${themeFlag} --path remote --store ${store} --verbose`,
+      `shopify theme pull --only templates/*.json --only templates/**/*.json --only locales/*.json ${themeFlag} --path remote --store ${store} --verbose`,
       [],
       EXEC_OPTIONS
     )
