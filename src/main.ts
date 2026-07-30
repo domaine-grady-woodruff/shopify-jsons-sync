@@ -7,6 +7,7 @@ import {
   syncLocaleAndSettingsJSON
 } from './utils'
 import {exec} from '@actions/exec'
+import {mkdirP} from '@actions/io'
 import {debug} from '@actions/core'
 
 async function run(): Promise<void> {
@@ -31,6 +32,9 @@ async function run(): Promise<void> {
     }
 
     await cleanRemoteFiles()
+    // `shopify theme pull --path remote` requires the target directory to
+    // already exist - it does not create it itself.
+    await mkdirP('remote')
 
     // Determine source: use source-theme if provided, otherwise use live theme
     // This controls WHERE we pull the JSON files FROM

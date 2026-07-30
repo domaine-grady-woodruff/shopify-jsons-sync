@@ -33,6 +33,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(2186));
 const utils_1 = __nccwpck_require__(918);
 const exec_1 = __nccwpck_require__(1514);
+const io_1 = __nccwpck_require__(7436);
 const core_1 = __nccwpck_require__(2186);
 async function run() {
     try {
@@ -51,6 +52,9 @@ async function run() {
             process.chdir(workingDirectory);
         }
         await (0, utils_1.cleanRemoteFiles)();
+        // `shopify theme pull --path remote` requires the target directory to
+        // already exist - it does not create it itself.
+        await (0, io_1.mkdirP)('remote');
         // Determine source: use source-theme if provided, otherwise use live theme
         // This controls WHERE we pull the JSON files FROM
         const themeFlag = sourceThemeId ? `--theme ${sourceThemeId}` : '--live';
