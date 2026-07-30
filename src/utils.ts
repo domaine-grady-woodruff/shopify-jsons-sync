@@ -1,6 +1,7 @@
 import {create} from '@actions/glob'
-import {readFile, writeFile} from 'fs/promises'
+import {mkdir, readFile, writeFile} from 'fs/promises'
 import {existsSync} from 'fs'
+import {dirname} from 'path'
 import deepmerge from 'deepmerge'
 import {rmRF} from '@actions/io'
 import {exec} from '@actions/exec'
@@ -170,7 +171,10 @@ export const syncLocaleAndSettingsJSON = async (): Promise<string[]> => {
         }
       })
 
-      // Write Merged File to Local File
+      // Write Merged File to Local File (parent dir may not exist yet for a
+      // locale file that's new to the local repo, e.g. a language just added
+      // on the live theme)
+      await mkdir(dirname(localFileRef), {recursive: true})
       await writeFile(localFileRef, JSON.stringify(mergedFile, null, 2))
       localFilesToPush.push(localFileRef)
     } catch (error) {

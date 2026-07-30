@@ -97,6 +97,7 @@ exports.getNewTemplatesToRemote = exports.syncLocaleAndSettingsJSON = exports.re
 const glob_1 = __nccwpck_require__(8090);
 const promises_1 = __nccwpck_require__(3292);
 const fs_1 = __nccwpck_require__(7147);
+const path_1 = __nccwpck_require__(1017);
 const deepmerge_1 = __importDefault(__nccwpck_require__(6323));
 const io_1 = __nccwpck_require__(7436);
 const exec_1 = __nccwpck_require__(1514);
@@ -233,7 +234,10 @@ const syncLocaleAndSettingsJSON = async () => {
                     }
                 }
             });
-            // Write Merged File to Local File
+            // Write Merged File to Local File (parent dir may not exist yet for a
+            // locale file that's new to the local repo, e.g. a language just added
+            // on the live theme)
+            await (0, promises_1.mkdir)((0, path_1.dirname)(localFileRef), { recursive: true });
             await (0, promises_1.writeFile)(localFileRef, JSON.stringify(mergedFile, null, 2));
             localFilesToPush.push(localFileRef);
         }
