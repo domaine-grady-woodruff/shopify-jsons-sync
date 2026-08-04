@@ -160,16 +160,31 @@ export const syncLocaleAndSettingsJSON = async (): Promise<string[]> => {
       const localFile = await readJsonFile(localFileRef)
 
       // Merge Local and Remote Files with Remote as Primary
-      const mergedFile = deepmerge(localFile, remoteFile, {
+      const mergeOptions: deepmerge.Options = {
         arrayMerge: (_, sourceArray) => sourceArray,
         customMerge: key => {
           if (key === 'blocks') {
-            return (_, newBlock) => {
-              return removeDisabledKeys(newBlock)
+            // Merge both sides' blocks together (remote wins on conflicts,
+            // same as the rest of the file) before stripping disabled ones -
+            // previously this returned newBlock alone, which silently
+            // dropped any block that only existed locally (e.g. a new
+            // block's schema translations added in code but not yet
+            // present on the source theme).
+            return (
+              localBlocks: ShopifySettingsOrTemplateJSON,
+              remoteBlocks: ShopifySettingsOrTemplateJSON
+            ) => {
+              const mergedBlocks = deepmerge<ShopifySettingsOrTemplateJSON>(
+                localBlocks,
+                remoteBlocks,
+                mergeOptions
+              )
+              return removeDisabledKeys(mergedBlocks)
             }
           }
         }
-      })
+      }
+      const mergedFile = deepmerge(localFile, remoteFile, mergeOptions)
 
       // Write Merged File to Local File (parent dir may not exist yet for a
       // locale file that's new to the local repo, e.g. a language just added

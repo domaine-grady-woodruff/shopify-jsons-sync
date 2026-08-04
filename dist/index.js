@@ -239,16 +239,24 @@ const syncLocaleAndSettingsJSON = async () => {
             // Read JSON for Local File
             const localFile = await (0, exports.readJsonFile)(localFileRef);
             // Merge Local and Remote Files with Remote as Primary
-            const mergedFile = (0, deepmerge_1.default)(localFile, remoteFile, {
+            const mergeOptions = {
                 arrayMerge: (_, sourceArray) => sourceArray,
                 customMerge: key => {
                     if (key === 'blocks') {
-                        return (_, newBlock) => {
-                            return (0, exports.removeDisabledKeys)(newBlock);
+                        // Merge both sides' blocks together (remote wins on conflicts,
+                        // same as the rest of the file) before stripping disabled ones -
+                        // previously this returned newBlock alone, which silently
+                        // dropped any block that only existed locally (e.g. a new
+                        // block's schema translations added in code but not yet
+                        // present on the source theme).
+                        return (localBlocks, remoteBlocks) => {
+                            const mergedBlocks = (0, deepmerge_1.default)(localBlocks, remoteBlocks, mergeOptions);
+                            return (0, exports.removeDisabledKeys)(mergedBlocks);
                         };
                     }
                 }
-            });
+            };
+            const mergedFile = (0, deepmerge_1.default)(localFile, remoteFile, mergeOptions);
             // Write Merged File to Local File (parent dir may not exist yet for a
             // locale file that's new to the local repo, e.g. a language just added
             // on the live theme)

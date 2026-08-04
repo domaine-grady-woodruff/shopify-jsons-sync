@@ -258,6 +258,53 @@ describe('syncLocaleAndSettingsJSON', () => {
     })
   })
 
+  test('a block that only exists locally is preserved, not dropped, when "blocks" exists on both sides', async () => {
+    // Regression: customMerge('blocks') used to return remote's blocks alone,
+    // discarding local's entirely whenever both sides had a 'blocks' key -
+    // e.g. a brand-new block's schema translations added in code but not yet
+    // present on the source theme would silently vanish from every push.
+    writeJson('locales/en.default.schema.json', {
+      blocks: {
+        existing_block: {settings: {label: {content: 'Existing'}}},
+        new_local_block: {settings: {label: {content: 'Brand new in code'}}}
+      }
+    })
+    writeJson('remote/locales/en.default.schema.json', {
+      blocks: {
+        existing_block: {settings: {label: {content: 'Existing (updated)'}}}
+      }
+    })
+
+    await syncLocaleAndSettingsJSON()
+
+    expect(readJson('locales/en.default.schema.json')).toEqual({
+      blocks: {
+        existing_block: {settings: {label: {content: 'Existing (updated)'}}},
+        new_local_block: {settings: {label: {content: 'Brand new in code'}}}
+      }
+    })
+  })
+
+  test('a disabled block added only locally is still stripped after merge', async () => {
+    writeJson('locales/en.default.schema.json', {
+      blocks: {
+        existing_block: {settings: {}},
+        new_but_disabled: {settings: {}, disabled: true}
+      }
+    })
+    writeJson('remote/locales/en.default.schema.json', {
+      blocks: {
+        existing_block: {settings: {}}
+      }
+    })
+
+    await syncLocaleAndSettingsJSON()
+
+    expect(readJson('locales/en.default.schema.json')).toEqual({
+      blocks: {existing_block: {settings: {}}}
+    })
+  })
+
   test('KNOWN GAP: disabled blocks survive when local has no "blocks" key yet', async () => {
     // customMerge('blocks') is only invoked by deepmerge when BOTH sides already
     // have a 'blocks' object at that key. If the local file has never had a
